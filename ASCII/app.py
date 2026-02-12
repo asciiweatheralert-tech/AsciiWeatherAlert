@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import smtplib
 from email.mime.text import MIMEText
@@ -7,10 +8,25 @@ from flask import Flask, request, jsonify, render_template
 app = Flask(__name__, template_folder='.', static_folder='.', static_url_path='')
 
 # ==============================================================================
-# 1. CONFIGURATION (THE SENDER)
+# 1. CONFIGURATION (SECURE FOR CLOUD DEPLOYMENT)
 # ==============================================================================
-SENDER_EMAIL = "ascii.weather.alert@gmail.com"
-SENDER_PASSWORD = "rcxg jftr wzel nwel"
+# ------------------------------------------------------------------
+# SECURITY NOTE:
+# We use os.getenv() to load the password from the Cloud Server settings.
+# This keeps your password safe when you upload this code to GitHub.
+# ------------------------------------------------------------------
+
+# 1. Get Email from Environment or fall back to your default
+SENDER_EMAIL = os.getenv("SENDER_EMAIL", "ascii.weather.alert@gmail.com")
+
+# 2. Get Password from Environment (CRITICAL!)
+# If running on Render/Cloud, this grabs the variable you set in the dashboard.
+# If running locally, you can temporarily replace os.getenv(...) with your actual string,
+# BUT DO NOT SAVE IT TO GITHUB like that.
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD") 
+
+if not SENDER_PASSWORD:
+    print("⚠️ WARNING: SENDER_PASSWORD is missing! Emails will not send.")
 
 # ==============================================================================
 # 2. EMERGENCY HOTLINE DATABASE
@@ -48,6 +64,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Run DB setup immediately when app starts
 init_db()
 
 # ==============================================================================
@@ -56,8 +73,11 @@ init_db()
 def send_real_email(recipient_email, subject, body):
     """
     Sends an actual email to the 'recipient_email'.
-    This recipient changes dynamically based on who is registered.
     """
+    if not SENDER_PASSWORD:
+        print(f"❌ EMAIL FAILED: Password not set in Environment Variables.")
+        return
+
     try:
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
@@ -140,7 +160,7 @@ def api_login():
         return jsonify({"status": "error", "message": "Invalid credentials"})
 
 # ==============================================================================
-# 8. API: TRIGGER ALERTS (UPDATED WITH LOCATION & HOTLINES)
+# 8. API: TRIGGER ALERTS
 # ==============================================================================
 @app.route('/api/trigger-alert', methods=['POST'])
 def trigger_alert():
@@ -203,4 +223,6 @@ def trigger_alert():
     return jsonify({"status": "success", "count": len(users)})
 
 if __name__ == '__main__':
+    # When running locally, debug is on.
+    # When deployed to Render/Cloud, the 'Procfile' handles the run command.
     app.run(debug=True, port=5000)
